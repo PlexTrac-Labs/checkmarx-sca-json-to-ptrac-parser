@@ -1,4 +1,4 @@
-# parser-checkmarx-sca
+# checkmarx-sca-json-to-ptrac-parser
 Custom stand alone parser for JSON files exported containing Checkmarx SCA vulnerabilities.
 
 # Requirements
