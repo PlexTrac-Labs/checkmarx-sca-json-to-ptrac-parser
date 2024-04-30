@@ -1877,7 +1877,7 @@ class CSVParser():
                             continue
                         log.success(f'Successfully added asset(s) info to finding!')
 
-    def save_data_as_ptrac(self):
+    def save_data_as_ptrac(self, file_name=None):
         """
         Creates and adds all relevant data to generate a ptrac file for each report found while parsing
         """
@@ -2072,8 +2072,9 @@ class CSVParser():
 
                 
                 # save report as ptrac
-                file_name = f'{self.checkmarx_sca_file_prefix}_{self.parser_time}.ptrac'
-                file_path = f'{folder_path}/{file_name}'
+                if file_name == None:
+                    file_name = f'{self.checkmarx_sca_file_prefix}_{self.parser_time}.ptrac'
+                file_path = f'{folder_path}/{file_name}.ptrac'
                 with open(f'{file_path}', 'w') as file:
                     json.dump(ptrac, file)
-                    log.success(f'Saved \'{report["name"]}\' to \'{file_name}\'')
+                    log.success(f'Saved new PTRAC \'{file_name}.ptrac\'')

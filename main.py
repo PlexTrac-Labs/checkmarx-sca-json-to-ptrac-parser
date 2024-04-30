@@ -10,6 +10,7 @@ log = logger.log
 import settings
 from csv_parser import CSVParser
 import utils.input_utils as input
+import utils.general_utils as utils
 
 
 
@@ -183,7 +184,10 @@ if __name__ == '__main__':
             failed_files.append(file_name)
             continue
         csv_parser.display_parser_results()
-        csv_parser.save_data_as_ptrac()
+        # check to make sure we don't override existing files in the exported-ptracs directory
+        existing_files = [os.path.splitext(file)[0] for file in os.listdir('exported-ptracs')]
+        export_file_name = utils.increment_file_name(file_name, existing_files)
+        csv_parser.save_data_as_ptrac(file_name=export_file_name)
         time.sleep(1) # required to have a minimum 1 sec delay since unique file names are determined by timestamp
         
     log.success(f'\n\nProcessed and created PTRAC files for {len(file_list)-len(failed_files)}/{len(file_list)} files in \'{json_files_directory}\'. New PTRAC file(s) can be found in \'exported-ptracs\' folder.')
