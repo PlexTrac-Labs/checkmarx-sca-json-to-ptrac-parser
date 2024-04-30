@@ -63,7 +63,7 @@ def try_parsing_date(possible_date_str: str) -> time.struct_time:
     :rtype: time.struct_time
     """
     error = None
-    accepted_data_formats = ['%m/%d/%Y', '%m-%d-%Y', '%m/%d/%y', '%m-%d-%y', '%Y/%m/%d', '%Y-%m-%d', '%m/%d/%Y %I:%M:%S %p']
+    accepted_data_formats = ['%m/%d/%Y', '%m-%d-%Y', '%m/%d/%y', '%m-%d-%y', '%Y/%m/%d', '%Y-%m-%d', '%Y-%m-%dT%H:%M:%S']
     for fmt in accepted_data_formats:
         try:
             return time.strptime(possible_date_str, fmt)

@@ -1,19 +1,19 @@
-from operator import itemgetter
-from typing import Union
+from typing import Union, List
 import yaml
+import json
+import csv
+import os
+import time
 
 import utils.log_handler as logger
 log = logger.log
 import settings
-from utils.auth_handler import Auth
-from csv_parser import Parser
+from csv_parser import CSVParser
 import utils.input_utils as input
-import api
 
 
-#----------Loading and Validating Input CSVs----------
 
-def handle_load_api_version(api_version: str, parser: Parser) -> None:
+def handle_load_api_version(api_version: str, parser: CSVParser) -> None:
     if api_version == "":
         api_version = input.prompt_user(f'The Api Version of the PT instance you want to import a .ptrac to is required for successful generation.\nEnter the API Version of your instance. This can be found at the bottom right of the Account Admin page in PT')
     if len(api_version.split(".")) == 3:
@@ -24,99 +24,105 @@ def handle_load_api_version(api_version: str, parser: Parser) -> None:
             return handle_load_api_version("", parser)
     
 
+def handle_load_file(path) -> dict|None:
+    # checks if the file exists - is loaded correctly - and contains some data
+    try:
+        with open(path, 'r', encoding='utf-8') as file:
+            json_data_raw = json.load(file)
+            if json_data_raw == {}:
+                log.exception(f'Empty JSON file')
+                return None
+            return json_data_raw
+    except Exception as e:
+        log.exception(e)
+        return None
 
-def handle_load_csv_headers_mapping(path, parser: Parser):
-    csv_headers_mapping = {}
 
-    csv = input.load_csv_data("Enter file path to the CSV mapping headers to Plextrac data types", csv_file_path=path)
+def handle_verify_file(loaded_file_data, csv_parser: CSVParser) -> bool:
+    # checks that the loaded file is valid for the script - correct report fields - has findings - correct finding fields
+    # correct report fields
+    root_keys = ["FullReportUrl", "RiskReportSummary", "Packages", "Vulnerabilities"]
+    for key in root_keys:
+        if key not in list(loaded_file_data.keys()):
+            log.exception(f'Expected key \'{key}\' not found in loaded JSON')
+            return False
+    # has findings
+    if len(loaded_file_data['Vulnerabilities']) < 1:
+        log.exception(f'Loaded JSON has no Vulnerabilities')
+        return False
+    # correct finding fields
+    finding_keys = list(loaded_file_data['Vulnerabilities'][0].keys())
+    if csv_parser.get_csv_headers() != finding_keys:
+        log.exception(f'Vulnerability headers read from JSON\n{finding_keys}')
+        log.exception(f'Expected headers\n{csv_parser.get_csv_headers()}')
+        return False
+    return True
 
-    for index, header in enumerate(csv.headers):
-        key = csv.data[0][index]
+
+def create_temp_csv(loaded_file_data) -> List[list]:
+    # determine temp CSV headers - TODO add more than just finding headers
+    finding_keys = list(loaded_file_data['Vulnerabilities'][0].keys())
+    temp_csv = []
+    temp_csv.append(finding_keys)
+    
+    for vuln in loaded_file_data['Vulnerabilities']:
+        # seed finding with number of possible columns determined from number of keys
+        finding = []
+        for i in range(len(finding_keys)):
+            finding.append("")
+        # parse vuln fields from JSON of finding, and add to list
+        for key, value in vuln.items():
+            index = finding_keys.index(key) if key in finding_keys else None
+            if index != None:
+                if key == "References":
+                    new_value = ""
+                    for item in value:
+                        new_value = f'{new_value}\n{item}'
+                    new_value = new_value[1:]
+                    finding.insert(index, new_value)
+                    finding.pop(index+1)
+                elif key == "Cvss":
+                    new_value = value['Score']
+                    finding.insert(index, new_value)
+                    finding.pop(index+1)
+                else:
+                    finding.insert(index, value)
+                    finding.pop(index+1)
+        # add parsed list of finding fields to CSV
+        temp_csv.append(finding)
+
+    # with open("temp_csv.csv",'w', newline="") as file:
+    #     writer = csv.writer(file)
+    #     writer.writerows(temp_csv)
+    
+    return temp_csv
+
+
+def handle_load_headers_into_parser(csv, parser: CSVParser) -> bool:
+    # setup JSON finding keys/headers into CSVParser > csv_headers_mapping dict
+    headers = csv[0]
+
+    for index, header in enumerate(headers):
+        if index == 0: # handle the BOM char added to the beginning of the CSV IF it exists
+            if "Title" in header and header != "Title":
+                header = header[1:]
+        key = parser.get_key_from_header(header)
         if key in parser.get_data_mapping_ids():
-            csv_headers_mapping[header] = key
-            continue
-        
-        if key == "":
-            csv_headers_mapping[header] = "no_mapping"
+            if parser.csv_headers_mapping[header].get("matched") == None: # if there are dup column headers, use the first col found and don't override when looking at the dup
+                parser.csv_headers_mapping[header]["col_index"] = index
+                parser.csv_headers_mapping[header]["matched"] = True
         else:
-            if input.continue_anyways( f'ERR: Key <{key}> selected for header <{header}> is not an valid key'):
-                csv_headers_mapping[header] = "no_mapping"
-            else:
-                exit()
+            log.error( f'Do not have mapping object created for header <{header}>. Check csv_parser.py > csv_headers_mapping_template to add. Marking as \'no_mapping\'')
 
-    parser.csv_headers_mapping = csv_headers_mapping
-    log.success(f'Loaded csv headers mapping')
+    log.success(f'Loaded column headings from temp CSV')
+    return True
 
 
-def handle_load_csv_data_verify(path, parser: Parser):
-    """
-    takes a filepath to a csv, and a list of expected headers and returned the csv data if the headers match
-    used as basic error checking that we have the correct csv
-    """
-    csv = input.load_csv_data("Enter file path to CSV data to import", csv_file_path=path)
+def handle_load_data_into_parser(csv, parser: CSVParser):
+    parser.csv_data = csv[1:]
+    log.success(f'Loaded data from temp CSV')
+    return True
 
-    if csv.headers != parser.get_csv_headers():
-        log.warning(f'CSV headers read from file\n{csv.headers}')
-        log.warning(f'Expected headers\n{parser.get_csv_headers()}')
-        if input.retry(f'Loaded {csv.file_path} CSV headers don\'t match headers in Headers Mapping CSV.'):
-            return handle_load_csv_data_verify("Enter file path to CSV data to import", "", parser.get_csv_headers())
-
-    parser.csv_data = csv.data
-    log.success(f'Loaded csv data')
-
-
-def handle_add_report_template_name(report_template_name, parser: Parser):
-    """
-    Checks if the given the report_template_name value from the config.yaml file matches the name of an existing
-    Report Template in Plextrac. If the template exists in platform, adds this report template UUID to the template
-    for reports created with this script. The result being a Report Template is selected in the proper dropdown
-    in platform for all reports created.
-    """
-    report_templates = []
-
-    response = api._templates.report_templates.list_report_templates(auth.base_url, auth.get_auth_headers(), auth.tenant_id)
-    if type(response) == list:
-        report_templates = list(filter(lambda x: x['data']['template_name'] == report_template_name, response))
-
-    if len(report_templates) > 1:
-        if not input.continue_anyways(f'report_template_name value \'{report_template_name}\' from config matches {len(report_templates)} Report Templates in platform. No Report Template will be added to reports.'):
-            exit()
-        return
-
-    if len(report_templates) == 1:
-        parser.report_template['template'] = report_templates[0]['data']['doc_id']
-        return
-    
-    if not input.continue_anyways(f'report_template_name value \'{report_template_name}\' from config does not match any Report Templates in platform. No Report Template will be added to reports.'):
-        exit()
-
-
-def handle_add_findings_template_name(findings_template_name, parser: Parser):
-    """
-    Checks if the given the findings_template_name value from the config.yaml file matches the name of an existing
-    Finding Layouts in Plextrac. If the layout exists in platform, adds this findings template UUID to the template
-    for reports created with this script. The result being a Finding Layout is selected in the proper dropdown
-    in platform for all reports created.
-    """
-    findings_templates = []
-
-    response = api._templates.findings_templateslayouts.list_findings_templates(auth.base_url, auth.get_auth_headers())
-    if type(response) == list:
-        findings_templates = list(filter(lambda x: x['data']['template_name'] == findings_template_name, response))
-
-    if len(findings_templates) > 1:
-        if not input.continue_anyways(f'findings_template_name value \'{findings_template_name}\' from config matches {len(findings_templates)} Finding Layouts in platform. No Findings Layout will be added to reports.'):
-            exit()
-        return
-
-    if len(findings_templates) == 1:
-        parser.report_template['fields_template'] = findings_templates[0]['data']['doc_id']
-        return
-    
-    if not input.continue_anyways(f'findings_template_name value \'{findings_template_name}\' from config does not match any Finding Layouts in platform. No Finding Layout will be added to reports.'):
-        exit()
-
-#----------End Loading and Validating Input CSVs----------
     
 
 if __name__ == '__main__':
@@ -126,52 +132,63 @@ if __name__ == '__main__':
     with open("config.yaml", 'r') as f:
         args = yaml.safe_load(f)
 
-    auth = Auth(args)
-    auth.handle_authentication()
-
-    parser = Parser()
-
-    # loads and validates csv data
+    # loads and validates JSON data
     log.info(f'---Starting data loading---')
     api_version = ""
     if args.get('api_version') != None and args.get('api_version') != "":
-        api_version = args.get('api_version')
+        api_version = str(args.get('api_version'))
         log.info(f'Set API Version to \'{api_version}\' from config...')
-    handle_load_api_version(api_version, parser)
-
-    csv_headers_file_path = ""
-    if args.get('csv_headers_file_path') != None and args.get('csv_headers_file_path') != "":
-        csv_headers_file_path = args.get('csv_headers_file_path')
-        log.info(f'Using csv header file path \'{csv_headers_file_path}\' from config...')
-    handle_load_csv_headers_mapping(csv_headers_file_path, parser)
     
-    csv_data_file_path = ""
-    if args.get('csv_data_file_path') != None and args.get('csv_data_file_path') != "":
-        csv_data_file_path = args.get('csv_data_file_path')
-        log.info(f'Using csv data file path \'{csv_data_file_path}\' from config...')
-    handle_load_csv_data_verify(csv_data_file_path, parser)
+    json_files_directory = ""
+    if args.get('json_files_directory') != None and args.get('json_files_directory') != "":
+        json_files_directory = args.get('json_files_directory')
+        log.info(f'Using Checkmarx XML data file path \'{json_files_directory}\' from config...')
 
-    report_template_name = ""
-    if args.get('report_template_name') != None and args.get('report_template_name') != "":
-        report_template_name = args.get('report_template_name')
-        log.info(f'Using report template \'{report_template_name}\' from config...')
-        handle_add_report_template_name(report_template_name, parser)
+    file_list = []
+    if os.path.exists(json_files_directory) and os.path.isdir(json_files_directory):
+        files = os.listdir(json_files_directory)
+        file_list = [file for file in files if os.path.isfile(os.path.join(json_files_directory, file))]
+        if len(file_list) > 0:
+            log.success(f'Found {len(file_list)} file(s) to process')
+        else:
+            log.critical(f'Could not find any files in \'{json_files_directory}\'. Exiting...')
+            exit()
+    else:
+        log.critical(f'Could not find directory \'{json_files_directory}\'. Exiting...')
+        exit()
 
-    findings_layout_name = ""
-    if args.get('findings_layout_name') != None and args.get('findings_layout_name') != "":
-        findings_layout_name = args.get('findings_layout_name')
-        log.info(f'Using findings layout \'{findings_layout_name}\' from config...')
-        handle_add_findings_template_name(findings_layout_name, parser)
-
-    parser.parse_data()
-    parser.display_parser_results()
-
-    if input.continue_anyways(f'IMPORTANT: Data will be imported into Plextrac.\nPlease view the log file generated from parsing to see if there were any errors.\nIf the data was not parsed correctly, please exit the script, fix the data, and re-run.\nThis will import data into {len(parser.clients)} client(s). The more clients you have the harder it will be to undo this import.'):
-        parser.import_data(auth)
-        log.info(f'Import Complete. Additional logs were added to {log.LOGS_FILE_PATH}')
-
-    if input.continue_anyways(f'IMPORTANT: Data will be saved to Ptrac(s).\nYou can save each parsed report as a Ptrac. You cannot import client data from a Ptrac.\nWould you like to create and save a Ptrac for {len(parser.reports)} report(s).'):
-        parser.save_data_as_ptrac()
-        log.info(f'Ptrac(s) creation complete. File(s) can be found in \'exported-ptracs\' folder. Additional logs were added to {log.LOGS_FILE_PATH}')
+    failed_files = []
+    for file_name in file_list:
+        log.info(f'Processing file \'{file_name}\'...')
+        file_path = f'{json_files_directory}/{file_name}'
+        csv_parser = CSVParser()
+        handle_load_api_version(api_version, csv_parser)
     
-    exit()
+        loaded_json_data = handle_load_file(file_path)
+        if loaded_json_data == None:
+            log.exception(f'Could not load JSON file. Skipping...')
+            failed_files.append(file_name)
+            continue
+        if not handle_verify_file(loaded_json_data, csv_parser):
+            log.exception(f'\'{file_name}\' doesn\'t appear to be a Checkmarx SCA JSON file. This script can only parser a Checkmarx SCA JSON file. Skipping...')
+            failed_files.append(file_name)
+            continue
+    
+        tmp_csv = create_temp_csv(loaded_json_data)
+        handle_load_headers_into_parser(tmp_csv, csv_parser)
+        handle_load_data_into_parser(tmp_csv, csv_parser)
+
+        if not csv_parser.parse_data():
+            log.exception(f'Ran into error and cannot parse data. Skipping...')
+            failed_files.append(file_name)
+            continue
+        csv_parser.display_parser_results()
+        csv_parser.save_data_as_ptrac()
+        time.sleep(1) # required to have a minimum 1 sec delay since unique file names are determined by timestamp
+        
+    log.success(f'\n\nProcessed and created PTRAC files for {len(file_list)-len(failed_files)}/{len(file_list)} files in \'{json_files_directory}\'. New PTRAC file(s) can be found in \'exported-ptracs\' folder.')
+    if len(failed_files) > 0:
+        failed_files_str = "\n".join(failed_files)
+        log.exception(f'Could not successfully process all files in the directory \'{json_files_directory}\'. Failed files:\n{failed_files_str}')
+    if settings.save_logs_to_file:
+        log.info(f'Additional logs were added to {log.LOGS_FILE_PATH}')

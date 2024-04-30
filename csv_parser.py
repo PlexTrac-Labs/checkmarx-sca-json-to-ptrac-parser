@@ -14,7 +14,95 @@ from utils.auth_handler import Auth
 import utils.general_utils as utils
 
 
-class Parser():
+class CSVParser():
+
+    csv_headers_mapping_template = {
+        "Id": {
+            "header": "Id",
+            "mapping_key": "finding_title",
+            "col_index": None
+        },
+        "CveName": {
+            "header": "CveName",
+            "mapping_key": "finding_cve",
+            "col_index": None
+        },
+        "Score": {
+            "header": "Score",
+            "mapping_key": "no_mapping",
+            "col_index": None
+        },
+        "Severity": {
+            "header": "Severity",
+            "mapping_key": "finding_severity",
+            "col_index": None
+        },
+        "PublishDate": {
+            "header": "PublishDate",
+            "mapping_key": "finding_created_at",
+            "col_index": None
+        },
+        "References": {
+            "header": "References",
+            "mapping_key": "finding_references",
+            "col_index": None
+        },
+        "Description": {
+            "header": "Description",
+            "mapping_key": "finding_description",
+            "col_index": None
+        },
+        "Cvss": {
+            "header": "Cvss",
+            "mapping_key": "finding_cvss3_1_overall",
+            "col_index": None
+        },
+        "Recommendations": {
+            "header": "Recommendations",
+            "mapping_key": "finding_recommendations",
+            "col_index": None
+        },
+        "PackageId": {
+            "header": "PackageId",
+            "mapping_key": "asset_name",
+            "col_index": None
+        },
+        "FixResolutionText": {
+            "header": "FixResolutionText",
+            "mapping_key": "finding_custom_field",
+            "col_index": None
+        },
+        "IsIgnored": {
+            "header": "IsIgnored",
+            "mapping_key": "no_mapping",
+            "col_index": None
+        },
+        "ExploitableMethods": {
+            "header": "ExploitableMethods",
+            "mapping_key": "no_mapping",
+            "col_index": None
+        },
+        "Cwe": {
+            "header": "Cwe",
+            "mapping_key": "finding_cwe",
+            "col_index": None
+        },
+        "IsViolatingPolicy": {
+            "header": "IsViolatingPolicy",
+            "mapping_key": "no_mapping",
+            "col_index": None
+        },
+        "IsNewInRiskReport": {
+            "header": "IsNewInRiskReport",
+            "mapping_key": "no_mapping",
+            "col_index": None
+        },
+        "Type": {
+            "header": "Type",
+            "mapping_key": "no_mapping",
+            "col_index": None
+        }
+    }
     
     # list of locations to store data in Plextrac and how to access that location
     data_mapping = {
@@ -147,7 +235,8 @@ class Parser():
             'data_type' : 'DETAIL',
             'validation_type': None,
             'input_blanks': False,
-            'path': ['assignedTo'] # document email
+            'path': ['assignedTo']
+            # format email
         },
         'finding_created_at': {
             'id': 'finding_created_at',
@@ -340,7 +429,8 @@ class Parser():
             'data_type' : 'CVE',
             'validation_type': None,
             'input_blanks': False,
-            'path': ['common_identifiers', 'CVE', 'INDEX'] # document CVE-2022-12345
+            'path': ['common_identifiers', 'CVE', 'INDEX']
+            # format CVE-2022-12345
         },
         'finding_cwe': {
             'id': 'finding_cwe_name',
@@ -348,7 +438,8 @@ class Parser():
             'data_type' : 'CWE',
             'validation_type': None,
             'input_blanks': False,
-            'path': ['common_identifiers', 'CWE', 'INDEX'] # document number i.e. 501
+            'path': ['common_identifiers', 'CWE', 'INDEX']
+            # format number i.e. 501
         },
         # ASSET INFO
         'asset_multi_name': {
@@ -625,7 +716,7 @@ class Parser():
     #--- CLIENT - template of client object - list of clients generated while running the script---
 
     # you can add data here that should be added to all clients
-    client_template = { # need all arrays build out to prevent KEY ERR when adding data
+    client_template_mock = { # need all arrays build out to prevent KEY ERR when adding data
         "sid": None,
         "name": f'Custom CSV Import Blank',
         "tags": ["custom_csv_import"],
@@ -634,15 +725,13 @@ class Parser():
         "assets": [],
         "reports": []
     }
-
-    clients = {}
     #--- END CLIENT---
 
 
     #--- REPORT - template of report object - list of reports generated while running the script---
 
     # you can add data here that should be added to all reports
-    report_template = { # need all arrays build out to prevent KEY ERR when adding data
+    report_template_mock = { # need all arrays build out to prevent KEY ERR when adding data
         'sid': None,
         'client_sid': None,
         "name": f'Custom CSV Import Report Blank',
@@ -656,15 +745,13 @@ class Parser():
         },
         "findings": []
     }
-
-    reports = {}
     #--- END REPORT---
 
 
     #--- FINDING - template of finding object - list of findings generated while running the script---
 
     # you can add data here that should be added to all findings
-    finding_template = { # need all arrays build out to prevent KEY ERR when adding data
+    finding_template_mock = { # need all arrays build out to prevent KEY ERR when adding data
         'sid': None,
         'client_sid': None,
         'report_sid': None,
@@ -711,15 +798,13 @@ class Parser():
         'affected_assets': {},
         'assets': []
     }
-
-    findings = {}
     #--- END FINDING---
 
 
     #--- ASSET - template of asset object - list of assets generated while running the script---
 
      # you can add data here that should be added to all assets
-    asset_template = { # need all arrays build out to prevent KEY ERR when adding data
+    asset_template_mock = { # need all arrays build out to prevent KEY ERR when adding data
         'sid': None,
         'client_sid': None,
         'finding_sid': None,
@@ -735,7 +820,7 @@ class Parser():
     }
 
     # template for created nested affected asset
-    affected_asset_fields = {
+    affected_asset_fields_mock = {
         'status': "Open",
         'ports': {},
         'locationUrl': "",
@@ -743,9 +828,6 @@ class Parser():
         'evidence': [],
         'notes': ""
     }
-
-    assets = {}
-    affected_assets = {}
     #--- END Asset---
 
 
@@ -812,7 +894,7 @@ class Parser():
         """
         
         """
-        self.csv_headers_mapping: dict = None
+        self.csv_headers_mapping: dict = deepcopy(self.csv_headers_mapping_template)
         self.csv_data: list = None
         self.parser_progess: int = None
 
@@ -824,8 +906,21 @@ class Parser():
         self.parser_time: str = time.strftime("%Y_%m_%d_%H_%M_%S", time.localtime(self.parser_time_seconds))
 
         self.doc_version = None
-        self.client_template['name'] = f'Custom CSV Import {self.parser_date}'
-        self.report_template['name'] = f'Custom CSV Import Report {self.parser_date}'
+
+        self.client_template = deepcopy(self.client_template_mock)
+        self.report_template = deepcopy(self.report_template_mock)
+        self.finding_template = deepcopy(self.finding_template_mock)
+        self.asset_template = deepcopy(self.asset_template_mock)
+        self.affected_asset_fields = deepcopy(self.affected_asset_fields_mock)
+        self.clients = {}
+        self.reports = {}
+        self.findings = {}
+        self.assets = {}
+        self.affected_assets = {}
+
+        self.client_template['name'] = f'client_name_{self.parser_date}'
+        self.report_template['name'] = f'report_name_{self.parser_date}'
+        self.checkmarx_sca_file_prefix = f'checkmarx_sca_export'
 
         # csv logging
         self.CSV_LOGS_FILE_PATH = f'parser_logs_{self.parser_time}.csv'
@@ -837,28 +932,27 @@ class Parser():
     
     def get_csv_headers(self):
         """
-        Returns the list of expected based on the csv_header value in the tracker array containing data mapping info.
+        Returns the list of expected headers based on the csv_header value in the tracker array containing data mapping info.
         """
-        return list(self.csv_headers_mapping.keys())
+        return list(map(lambda x:x['header'], self.csv_headers_mapping.values()))
 
-    # TODO - this function is not used, consider removing
-    def get_headers_by_data_type(self, data_type):
-        type_mappings = list(map(lambda x: x['id'], list((filter(lambda x: (x['data_type'] == data_type), self.data_mapping.values()))) ))
-        log.debug(type(type_mappings))
-        log.debug(type_mappings)
-        # mapped_headers = filter(lambda header, id: (id in type_mappings), self.csv_headers_mapping.items())
-        # log.debug(type(mapped_headers))
-        # log.debug(mapped_headers)
-
+    def get_index_from_header(self, header):
+        return self.csv_headers_mapping.get(header, {}).get("col_index")
 
     def get_key_from_header(self, header):
-        return self.csv_headers_mapping.get(header)
+        return self.csv_headers_mapping.get(header, {}).get("mapping_key")
+    
+    def get_index_from_key(self, mapping_key):
+        for value in self.csv_headers_mapping.values():
+            if mapping_key == value['mapping_key']:
+                return value['col_index']
+        return None
 
     # only returns the first instance of the key. will not get expected return if a generic key is used i.e. finding_custom_field
-    def get_header_from_key(self, key):
-        for header, id in self.csv_headers_mapping.items():
-            if key == id:
-                return header
+    def get_header_from_key(self, mapping_key):
+        for value in self.csv_headers_mapping.values():
+            if mapping_key == value['mapping_key']:
+                return value['header']
         return None
     #----------End getters and setter----------
 
@@ -935,6 +1029,27 @@ class Parser():
         #         log.info(f'{log["num"]} {log["message"]}.')
 
         log.info(f'Detailed logs can be found in \'{log.LOGS_FILE_PATH}\'')
+
+    def save_data_to_csv(self, file_path: str) -> None:
+        """
+        Useful for testing to read the CSV data the CSVParser object is currently holding onto.
+
+        Note: Microsoft Excel has a limit of 32,767 characters for a single cell. This will make the CSV
+              file look wrong if there is a cell that is longer than this. Python is still able to handle
+              this length of a string perfectly fine.
+
+        :param file_path: file path and name to save the CSV to
+        :type file_path: str
+        """
+        log.info(f'Saving current data to CSV \'{file_path}\'')
+        try:
+            with open(file_path, 'w', newline="", encoding="utf-8") as file:
+                writer = csv.writer(file, quoting=csv.QUOTE_MINIMAL)
+                writer.writerow(self.get_csv_headers())
+                writer.writerows(self.csv_data)
+            log.success(f'Saved data to CSV \'{file_path}\'')
+        except Exception as e:
+            log.exception(f'Could not save data to CSV: {e}')
     #----------End logging functions----------
 
 
@@ -1013,8 +1128,8 @@ class Parser():
         if header == None:
             matching_clients = list(filter(lambda x: (self.client_template['name'] == str(x['name'])), self.clients.values()))
         else:
-            index = list(self.csv_headers_mapping.keys()).index(header)
-            value = row[index]
+            index = self.get_index_from_header(header)
+            value = row[index] # there could be an index problem if client_name is NOT used as a mapping_key in self.csv_headers_mapping_template - currently handled elsewhere
 
             if value == "":
                 matching_clients = list(filter(lambda x: (self.client_template['name'] == str(x['name'])), self.clients.values()))
@@ -1059,8 +1174,8 @@ class Parser():
             matching_reports = filter(lambda x: (x['client_sid'] == client_sid), matching_reports)
             matching_reports = list(filter(lambda x: (self.report_template['name'] in str(x['name'])), matching_reports))
         else:
-            index = list(self.csv_headers_mapping.keys()).index(header)
-            value = row[index]
+            index = self.get_index_from_header(header)
+            value = row[index] # there could be an index problem if report_name is NOT used as a mapping_key in self.csv_headers_mapping_template - currently handled elsewhere
 
             if value == "":
                 matching_reports = self.reports.values()
@@ -1110,8 +1225,8 @@ class Parser():
         # filter for matching findings by title
         header = self.get_header_from_key('finding_title')
 
-        index = list(self.csv_headers_mapping.keys()).index(header)
-        value = row[index]
+        index = self.get_index_from_header(header)
+        value = row[index] # there is checking in the parse_data func to prevent index errors here
 
         matching_findings = list(filter(lambda x: (value == x['title']), matching_findings))
 
@@ -1144,8 +1259,8 @@ class Parser():
         if header == None:
             return
 
-        index = list(self.csv_headers_mapping.keys()).index(header)
-        value = row[index]
+        index = self.get_index_from_header(header)
+        value = row[index] # there could be an index problem if we DO use the asset_multi_name as a mapping_key in self.csv_headers_mapping_template
         if value == "":
             return
 
@@ -1192,7 +1307,10 @@ class Parser():
         if header == None:
             return None, None
 
-        index = list(self.csv_headers_mapping.keys()).index(header)
+        index = self.get_index_from_header(header)
+        if index == None:
+            return None, None
+
         value = row[index]
         if value == "":
             return None, None
@@ -1283,6 +1401,9 @@ class Parser():
             except ValueError:
                 log.exception(f"Non-valid date format for '{header}': '{value}'. Ignoring...")
                 return
+            except Exception:
+                log.exception(f"Could not parse date value for '{header}': '{value}'. Ignoring...")
+                return
             self.set_value(obj, path, time.strftime("%Y-%m-%dT08:00:00.000000Z", raw_date))
             return
 
@@ -1291,6 +1412,9 @@ class Parser():
                 raw_date = utils.try_parsing_date(value)
             except ValueError:
                 log.exception(f"Non-valid date format for '{header}': '{value}'. Ignoring...")
+                return
+            except Exception:
+                log.exception(f"Could not parse date value for '{header}': '{value}'. Ignoring...")
                 return
             self.set_value(obj, path, int(time.mktime(raw_date)*1000))
             return
@@ -1492,7 +1616,11 @@ class Parser():
 
         Adds all data from csv row that coresponds to the object type
         """
-        for index, header in enumerate(self.csv_headers_mapping):
+        for value in self.csv_headers_mapping.values():
+            index = value['col_index']
+            if index == None: # CSV being processed doesn't have this column from the mapping, so the index never got set
+                continue
+            header = value['header']
             data_mapping_key = self.get_key_from_header(header)
             if data_mapping_key == None:
                 log.debug(f'CSV header "{header}" not mapped with a location key. Skipping {header}...')
@@ -1575,7 +1703,7 @@ class Parser():
             self.handle_affected_asset(row, finding_sid)
 
 
-    def parse_data(self):
+    def parse_data(self) -> bool:
         """
         Top level parsing controller. Loops through loaded csv, gathers required data, calls function to process data.
 
@@ -1590,10 +1718,12 @@ class Parser():
 
         # get index of 'name' obj in self.data_mapping - this will be the index to point us to the finding name column in the csv
         try:
-            csv_finding_title_index = list(self.csv_headers_mapping.values()).index('finding_title')
+            csv_finding_title_index = self.get_index_from_key("finding_title")
+            if csv_finding_title_index == None:
+                raise ValueError
         except ValueError:
-            log.critical(f'Did not map "finding_title" key to any csv headers. Cannot process CSV. Exiting...')
-            exit()
+            log.critical(f'Did not map "finding_title" key to any csv headers during temporary CSV creation. Cannot process file. Skipping...')
+            return False
 
         log.info(f'---Beginning CSV parsing---')
         self.parser_progess = 0
@@ -1617,8 +1747,9 @@ class Parser():
             #     break
 
         # post parsing processing
-        log.info(f'---Post parsing proccessing---')
+        log.info(f'---Post parsing processing---')
         self.handle_finding_dup_names()
+        return True
 
 
     def import_data(self, auth: Auth):
@@ -1774,7 +1905,7 @@ class Parser():
             log.debug(f'Could not create directory {folder_path}, already exists')
 
         # creates and export a ptrac for each report parsed
-        log.info(f'---Creating ptracs---')
+        log.info(f'---Creating ptrac---')
         # clients
         for client in self.clients.values():
             client_info = deepcopy(client)
@@ -1941,7 +2072,7 @@ class Parser():
 
                 
                 # save report as ptrac
-                file_name = f'{utils.sanitize_file_name(client["name"])}_{utils.sanitize_file_name(report["name"])}_{self.parser_time}.ptrac'
+                file_name = f'{self.checkmarx_sca_file_prefix}_{self.parser_time}.ptrac'
                 file_path = f'{folder_path}/{file_name}'
                 with open(f'{file_path}', 'w') as file:
                     json.dump(ptrac, file)
